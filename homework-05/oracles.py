@@ -86,16 +86,19 @@ class LogRegL2Oracle(BaseSmoothOracle):
         self.regcoef = regcoef
 
     def func(self, x):
-        # TODO: Implement
-        return None
+        # log(1 + exp(-b_i * A_i x)) = logsumexp([0, -b_i * A_i x])
+        a = np.array([np.zeros(len(self.b)), -self.b * self.matvec_Ax(x)])
+        return np.logsumexp(a, axis=0).mean() + 0.5 * self.regcoef * np.dot(x, x)
 
     def grad(self, x):
-        # TODO: Implement
-        return None
+        # Градиент: -A^T(b * σ(-b * Ax)) / m + λx
+        return -self.matvec_ATx(self.b * expit(-self.b * self.matvec_Ax(x))) / len(self.b) + self.regcoef * x
 
     def hess(self, x):
-        # TODO: Implement
-        return None
+        # σ(-b_i * A_i x) * σ(b_i * A_i x)
+        diag = expit(-self.b * self.matvec_Ax(x)) * expit(self.b * self.matvec_Ax(x))
+        # Гессиан: A^T * diag(s) * A / m + λI
+        return self.matmat_ATsA(diag) / len(self.b) + self.regcoef * np.eye(len(x))
 
 
 class LogRegL2OptimizedOracle(LogRegL2Oracle):
@@ -110,6 +113,7 @@ class LogRegL2OptimizedOracle(LogRegL2Oracle):
 
     def func_directional(self, x, d, alpha):
         # TODO: Implement optimized version with pre-computation of Ax and Ad
+
         return None
 
     def grad_directional(self, x, d, alpha):
@@ -122,12 +126,11 @@ def create_log_reg_oracle(A, b, regcoef, oracle_type='usual'):
     Auxiliary function for creating logistic regression oracles.
         `oracle_type` must be either 'usual' or 'optimized'
     """
-    matvec_Ax = lambda x: x  # TODO: Implement
-    matvec_ATx = lambda x: x  # TODO: Implement
+    matvec_Ax = lambda x: A @ x
+    matvec_ATx = lambda x: A.T @ x
 
     def matmat_ATsA(s):
-        # TODO: Implement
-        return None
+        return A.T @ s @ A
 
     if oracle_type == 'usual':
         oracle = LogRegL2Oracle
@@ -136,7 +139,6 @@ def create_log_reg_oracle(A, b, regcoef, oracle_type='usual'):
     else:
         raise 'Unknown oracle_type=%s' % oracle_type
     return oracle(matvec_Ax, matvec_ATx, matmat_ATsA, b, regcoef)
-
 
 
 def grad_finite_diff(func, x, eps=1e-8):
