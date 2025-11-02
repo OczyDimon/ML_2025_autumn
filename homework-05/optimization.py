@@ -1,6 +1,7 @@
 import numpy as np
 from numpy.linalg import LinAlgError
 from scipy.optimize.linesearch import scalar_search_wolfe2
+import scipy
 from datetime import datetime
 from collections import defaultdict
 
@@ -260,7 +261,7 @@ def newton(oracle, x_0, tolerance=1e-5, max_iter=100,
     start_time = datetime.now()
 
     for i in range(max_iter):
-        x_k = x_k - line_search_tool.line_search(oracle, x_k, -np.linalg.solve(oracle.hess(x_k), oracle.grad(x_k)))
+        x_k = x_k - line_search_tool.line_search(oracle, x_k, -scipy.linalg.cho_solve(oracle.hess(x_k), oracle.grad(x_k)))
         if history:
             history['time'].append((datetime.now() - start_time).total_seconds())
             history['func'].append(oracle.func(x_k))

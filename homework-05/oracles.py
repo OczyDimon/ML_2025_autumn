@@ -109,16 +109,35 @@ class LogRegL2OptimizedOracle(LogRegL2Oracle):
     For explanation see LogRegL2Oracle.
     """
     def __init__(self, matvec_Ax, matvec_ATx, matmat_ATsA, b, regcoef):
+        self.Ax = None
+        self.Ad = None
         super().__init__(matvec_Ax, matvec_ATx, matmat_ATsA, b, regcoef)
 
     def func_directional(self, x, d, alpha):
-        # TODO: Implement optimized version with pre-computation of Ax and Ad
+        if self.Ax is None:
+            self.Ax = self.matvec_Ax(x)
+        if self.Ad is None:
+            self.Ad = self.matvec_Ax(d)
 
-        return None
+        # log(1 + exp(-b_i * A_i(x + alpha * d)))
+        a = np.logsumexp(np.array([np.zeros(len(self.b)), -self.b * (self.Ax + alpha * self.Ad)]), axis=0).mean()
+
+        return a + 0.5 * self.regcoef * np.dot(x + alpha * d, x + alpha * d)
 
     def grad_directional(self, x, d, alpha):
-        # TODO: Implement optimized version with pre-computation of Ax and Ad
-        return None
+
+        if self.Ax is None:
+            self.Ax = self.matvec_Ax(x)
+        if self.Ad is None:
+            self.Ad = self.matvec_Ax(d)
+
+        # ⟨-A^T(b * σ(-b * A(x+αd)))/m, d⟩ = -⟨b * σ(-b * A(x+αd)), Ad⟩/m
+        data_derivative = -np.dot(self.b * expit(-self.b * (self.Ax + alpha * self.Ad)), self.Ad) / len(self.b)
+
+        # ⟨λ(x + αd), d⟩
+        reg_derivative = self.regcoef * np.dot(x + alpha * d, d)
+
+        return data_derivative + reg_derivative
 
 
 def create_log_reg_oracle(A, b, regcoef, oracle_type='usual'):
@@ -150,7 +169,15 @@ def grad_finite_diff(func, x, eps=1e-8):
                           >> i <<
     """
     # TODO: Implement numerical estimation of the gradient
-    return None
+    grad = np.zeros_like(x)
+    f_x = func(x)
+
+    for i in range(x.size):
+        dx = np.zeros_like(x)
+        dx.flat[i] = eps
+        grad.flat[i] = (func(x + dx) - f_x) / eps
+
+    return grad
 
 
 def hess_finite_diff(func, x, eps=1e-5):
@@ -164,5 +191,32 @@ def hess_finite_diff(func, x, eps=1e-5):
         e_i = (0, 0, ..., 0, 1, 0, ..., 0)
                           >> i <<
     """
-    # TODO: Implement numerical estimation of the Hessian
-    return None
+
+    n = x.size
+    hess = np.zeros((n, n))
+    f_x = func(x)
+
+    # f(x + eps * e_i) for i
+    f_plus_i = np.zeros(n)
+    for i in range(n):
+        dx = np.zeros_like(x)
+        dx.flat[i] = eps
+        f_plus_i[i] = func(x + dx)
+
+    for i in range(n):
+        dx_i = np.zeros_like(x)
+        dx_i.flat[i] = eps
+
+        for j in range(i, n):
+            dx_j = np.zeros_like(x)
+            dx_j.flat[j] = eps
+
+            f_plus_ij = func(x + dx_i + dx_j)
+            hess_ij = (f_plus_ij - f_plus_i[i] - f_plus_i[j] + f_x) / (eps**2)
+
+            hess[i, j] = hess_ij
+            if i != j:
+                hess[j, i] = hess_ij
+
+    return hess
+
