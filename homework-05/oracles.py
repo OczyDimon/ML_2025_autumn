@@ -1,6 +1,6 @@
 import numpy as np
 import scipy
-from scipy.special import expit
+from scipy.special import expit, logsumexp
 
 
 class BaseSmoothOracle(object):
@@ -88,7 +88,7 @@ class LogRegL2Oracle(BaseSmoothOracle):
     def func(self, x):
         # log(1 + exp(-b_i * A_i x)) = logsumexp([0, -b_i * A_i x])
         a = np.array([np.zeros(len(self.b)), -self.b * self.matvec_Ax(x)])
-        return np.logsumexp(a, axis=0).mean() + 0.5 * self.regcoef * np.dot(x, x)
+        return logsumexp(a, axis=0).mean() + 0.5 * self.regcoef * np.dot(x, x)
 
     def grad(self, x):
         # Градиент: -A^T(b * σ(-b * Ax)) / m + λx
@@ -120,7 +120,7 @@ class LogRegL2OptimizedOracle(LogRegL2Oracle):
             self.Ad = self.matvec_Ax(d)
 
         # log(1 + exp(-b_i * A_i(x + alpha * d)))
-        a = np.logsumexp(np.array([np.zeros(len(self.b)), -self.b * (self.Ax + alpha * self.Ad)]), axis=0).mean()
+        a = logsumexp(np.array([np.zeros(len(self.b)), -self.b * (self.Ax + alpha * self.Ad)]), axis=0).mean()
 
         return a + 0.5 * self.regcoef * np.dot(x + alpha * d, x + alpha * d)
 
