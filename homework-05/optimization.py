@@ -1,6 +1,6 @@
 import numpy as np
 from numpy.linalg import LinAlgError
-from scipy.optimize.linesearch import scalar_search_wolfe2
+from scipy.optimize._linesearch import scalar_search_wolfe2
 import scipy
 from datetime import datetime
 from collections import defaultdict
@@ -78,20 +78,14 @@ class LineSearchTool(object):
         """
 
         if self._method == 'Wolfe':
-            alpha = previous_alpha if previous_alpha is not None else self.alpha_0
+            phi = lambda alpha: oracle.func_directional(x_k, d_k, alpha)
+            d_phi = lambda alpha: oracle.grad_directional(x_k, d_k, alpha)
 
-            res = scalar_search_wolfe2(oracle.func_directional, oracle.grad_directional, x_k, d_k,
-                                       c1=self.c1, c2=self.c2, amax=alpha)[0]
+            res = scalar_search_wolfe2(phi, d_phi, c1=self.c1, c2=self.c2)[0]
             if res is not None:
                 return res
 
-            # backtracking if method fails
-            alpha = previous_alpha if previous_alpha is not None else self.alpha_0
-            while oracle.func_directional(x_k, d_k, alpha) > oracle.func(x_k) + \
-                    self.c1 * alpha * np.dot(oracle.grad(x_k), d_k):
-                alpha /= 2
-
-            return alpha
+            self._method = 'Armijo'
 
         if self._method == 'Armijo':
             # backtracking
@@ -179,8 +173,9 @@ def gradient_descent(oracle, x_0, tolerance=1e-5, max_iter=10000,
 
     # Use line_search_tool.line_search() for adaptive step size.
     for i in range(max_iter):
-        x_k = x_k - line_search_tool.line_search(oracle, x_k, -oracle.grad(x_k))
-        if history:
+        x_k1 = x_k - line_search_tool.line_search(oracle, x_k, -oracle.grad(x_k)) * oracle.grad(x_k)
+        x_k = x_k1.copy()
+        if history is not None:
             history['time'].append((datetime.now() - start_time).total_seconds())
             history['func'].append(oracle.func(x_k))
             history['grad_norm'].append(np.linalg.norm(oracle.grad(x_k)))
@@ -189,7 +184,7 @@ def gradient_descent(oracle, x_0, tolerance=1e-5, max_iter=10000,
         if display:
             print('Iteration: {}, x_k: {},'
                   ' f(x_k): {}, ||g(x_k)||: {}'.format(i, x_k, oracle.func(x_k), np.linalg.norm(oracle.grad(x_k))))
-        if np.linalg.norm(oracle.grad(x_k))**2 < (tolerance * np.linalg.norm(oracle.grad(x_0))**2):
+        if np.linalg.norm(oracle.grad(x_k), ord=2)**2 <= (tolerance * np.linalg.norm(oracle.grad(x_0), ord=2)**2):
             if display:
                 print('norm(grad(x_k))^2 < epsilon * norm(grad(x_0))^2!')
                 print('Iterations: {}'.format(i))
@@ -261,8 +256,9 @@ def newton(oracle, x_0, tolerance=1e-5, max_iter=100,
     start_time = datetime.now()
 
     for i in range(max_iter):
-        x_k = x_k - line_search_tool.line_search(oracle, x_k, -scipy.linalg.cho_solve(oracle.hess(x_k), oracle.grad(x_k)))
-        if history:
+        d = np.linalg.solve(oracle.hess(x_k), oracle.grad(x_k))
+        x_k -= line_search_tool.line_search(oracle, x_k, -d) * d
+        if history is not None:
             history['time'].append((datetime.now() - start_time).total_seconds())
             history['func'].append(oracle.func(x_k))
             history['grad_norm'].append(np.linalg.norm(oracle.grad(x_k)))

@@ -98,7 +98,7 @@ class LogRegL2Oracle(BaseSmoothOracle):
         # σ(-b_i * A_i x) * σ(b_i * A_i x)
         diag = expit(-self.b * self.matvec_Ax(x)) * expit(self.b * self.matvec_Ax(x))
         # Гессиан: A^T * diag(s) * A / m + λI
-        return self.matmat_ATsA(diag) / len(self.b) + self.regcoef * np.eye(len(x))
+        return self.matmat_ATsA(diag) / len(self.b) + self.regcoef * np.eye(len(self.b))
 
 
 class LogRegL2OptimizedOracle(LogRegL2Oracle):
@@ -149,6 +149,11 @@ def create_log_reg_oracle(A, b, regcoef, oracle_type='usual'):
     matvec_ATx = lambda x: A.T @ x
 
     def matmat_ATsA(s):
+        # '''
+        # УЧИТЫВАЕМ SPARSE
+        # '''
+        # if scipy.sparse.isspmatrix_dia(A):
+        #     return A.T @ (s[:, None] * A)
         return A.T @ s @ A
 
     if oracle_type == 'usual':
